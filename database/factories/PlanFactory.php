@@ -2,11 +2,13 @@
 
 namespace Database\Factories;
 
+use Illuminate\Support\Facades\DB;
 use AMohamed\OfflineCashier\Models\Plan;
+use AMohamed\OfflineCashier\Models\Feature;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Model>
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\AMohamed\OfflineCashier\Models\Plan>
  */
 class PlanFactory extends Factory
 {
@@ -25,9 +27,17 @@ class PlanFactory extends Factory
             'price' => $this->faker->randomFloat(2, 10, 100),
             'billing_interval' => $this->faker->randomElement(['month', 'year']),
             'trial_period_days' => $this->faker->optional()->numberBetween(7, 30),
-            'features' => ['feature1', 'feature2', 'feature3'],
             'stripe_price_id' => $this->faker->optional()->uuid,
         ];
+    }
+
+    public function configure()
+    {
+        return $this->afterCreating(function (Plan $plan) {
+            DB::table('feature_plan')->where('plan_id', $plan->id)->delete();
+            $features = Feature::factory()->count(3)->create();
+            $plan->features()->sync($features->pluck('id'));
+        });
     }
 
     public function withTrial(int $days = 14): self
@@ -51,5 +61,15 @@ class PlanFactory extends Factory
             'billing_interval' => 'year',
             'price' => $price,
         ]);
+    }
+
+    /**
+     * Add specific features to the plan.
+     */
+    public function withFeatures(array $features): self
+    {
+        return $this->afterCreating(function (Plan $plan) use ($features) {
+            $plan->features()->sync($features);
+        });
     }
 }

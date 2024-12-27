@@ -6,6 +6,9 @@ use Livewire\Component;
 use AMohamed\OfflineCashier\Models\Plan;
 use AMohamed\OfflineCashier\Models\Subscription;
 use Illuminate\Support\Facades\Auth;
+use AMohamed\OfflineCashier\Services\InvoiceService;
+use Illuminate\Support\Facades\Log;
+use AMohamed\OfflineCashier\Services\SubscriptionService;
 
 class SubscriptionComponent extends Component
 {
@@ -13,10 +16,18 @@ class SubscriptionComponent extends Component
     public $selectedPlan;
     public $paymentMethod = 'cash';
     public $referenceNumber;
+    protected $invoiceService;
+    protected $subscriptionService;
+
+    public function __construct()
+    {
+        $this->invoiceService = new InvoiceService();
+        $this->subscriptionService = new SubscriptionService();
+    }
 
     public function mount()
     {
-        $this->plans = Plan::all();
+        $this->plans = Plan::with('features')->get();
     }
 
     public function selectPlan($planId)
@@ -32,11 +43,7 @@ class SubscriptionComponent extends Component
             'referenceNumber' => 'required_if:paymentMethod,cash,check,bank_transfer'
         ]);
 
-        $subscription = Auth::user()->subscriptions()->create([
-            'plan_id' => $this->selectedPlan->id,
-            'status' => 'active',
-            'payment_method' => $this->paymentMethod,
-        ]);
+        $subscription = $this->subscriptionService->create(Auth::user(), $this->selectedPlan, $this->paymentMethod);
 
         $payment = $subscription->payments()->create([
             'amount' => $this->selectedPlan->price,
@@ -45,6 +52,8 @@ class SubscriptionComponent extends Component
             'reference_number' => $this->referenceNumber,
             'paid_at' => now(),
         ]);
+
+        $this->invoiceService->generate($payment);
 
         session()->flash('message', 'Successfully subscribed to ' . $this->selectedPlan->name);
 
